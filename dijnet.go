@@ -2,59 +2,65 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"strings"
-
-	"github.com/gocolly/colly/v2"
 )
 
-func download() {
+func NewService() Service {
+	cookieJar, _ := cookiejar.New(nil)
 
-	username := os.Getenv("DIJNET_USERNAME")
-	password := os.Getenv("DIJNET_PASSWORD")
-	c := colly.NewCollector()
-	c.AllowURLRevisit = true
+	return Service{client: &http.Client{
+		Jar: cookieJar,
+	}}
+}
 
-	c.Post("https://www.dijnet.hu/ekonto/login/login_check_password", map[string]string{
-		"vfw_form": "login_check_password",
-		"vfw_coll": "direct",
-		"username": username,
-		"password": password,
-	})
+type Service struct {
+	client *http.Client
+}
 
-	c.Visit("https://www.dijnet.hu/ekonto/control/szamla_search")
+func (s Service) Login(username string, password string) error {
+	payload := url.Values{}
+	payload.Set("vfw_form", "login_check_password")
+	payload.Set("vfw_coll", "direct")
+	payload.Set("username", username)
+	payload.Set("password", password)
+	req, err := http.NewRequest(http.MethodPost,
+		"https://www.dijnet.hu/ekonto/login/login_check_password",
+		strings.NewReader(payload.Encode()),
+	)
+	if err != nil {
+		return err
+	}
 
-	c.OnHTML(".sortable tr", func(e *colly.HTMLElement) {
-		fmt.Println(e.Attr("id"))
-		id := e.Attr("id")
-		rowid := strings.Split(id, "_")[1]
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-		fmt.Println(e.Text)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
-		c2 := c.Clone()
-		c2.Visit("https://www.dijnet.hu/ekonto/control/szamla_select?vfw_coll=szamla_list&vfw_rowid=" + rowid + "&exp=K")
-		c2.Visit("https://www.dijnet.hu/ekonto/control/szamla_letolt")
-
-		c3 := c2.Clone()
-		c3.OnResponse(func(r *colly.Response) {
-			r.Save("./invoices/" + r.FileName())
-		})
-		c3.Visit("https://www.dijnet.hu/ekonto/control/szamla_pdf")
-		c3.Visit("https://www.dijnet.hu/ekonto/control/szamla_xml")
-
-		c2.Visit("https://www.dijnet.hu/ekonto/control/szamla_list")
-	})
-
-	c.Post("https://www.dijnet.hu/ekonto/control/szamla_search_submit", map[string]string{
-		"vfw_form":     "szamla_search_submit",
-		"vfw_coll":     "szamla_search_params",
-		"szlaszolgnev": "",
-		"regszolgid":   "",
-		"datumtol":     "2020.03.15",
-		"datumig":      "2020.04.12",
-	})
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(string(body), "Bejelentkez&eacute;si n&eacute;v: <strong>"+username+"</strong>") {
+		return fmt.Errorf("wrong username or password")
+	}
+	return nil
 }
 
 func main() {
-	download()
+	username := os.Getenv("DIJNET_USERNAME")
+	password := os.Getenv("DIJNET_PASSWORD")
+	srv := NewService()
+	err := srv.Login(username, password)
+	fmt.Println(err)
 }
