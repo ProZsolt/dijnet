@@ -24,14 +24,15 @@ func download() {
 
 	c.Visit("https://www.dijnet.hu/ekonto/control/szamla_search")
 
-	c.OnHTML(".szamla_table tr td:nth-of-type(1)", func(e *colly.HTMLElement) {
-		onclick := e.Attr("onclick")
-		link := strings.Split(onclick, "'")[1]
+	c.OnHTML(".sortable tr", func(e *colly.HTMLElement) {
+		fmt.Println(e.Attr("id"))
+		id := e.Attr("id")
+		rowid := strings.Split(id, "_")[1]
 
 		fmt.Println(e.Text)
 
 		c2 := c.Clone()
-		c2.Visit(e.Request.AbsoluteURL(link))
+		c2.Visit("https://www.dijnet.hu/ekonto/control/szamla_select?vfw_coll=szamla_list&vfw_rowid=" + rowid + "&exp=K")
 		c2.Visit("https://www.dijnet.hu/ekonto/control/szamla_letolt")
 
 		c3 := c2.Clone()
