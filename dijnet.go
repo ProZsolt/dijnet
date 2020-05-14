@@ -2,29 +2,25 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	"github.com/gocolly/colly/v2"
 )
 
-func main() {
+func download() {
 
 	username := os.Getenv("DIJNET_USERNAME")
 	password := os.Getenv("DIJNET_PASSWORD")
 	c := colly.NewCollector()
 	c.AllowURLRevisit = true
 
-	err := c.Post("https://www.dijnet.hu/ekonto/login/login_check_password", map[string]string{
+	c.Post("https://www.dijnet.hu/ekonto/login/login_check_password", map[string]string{
 		"vfw_form": "login_check_password",
 		"vfw_coll": "direct",
 		"username": username,
 		"password": password,
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	c.Visit("https://www.dijnet.hu/ekonto/control/szamla_search")
 
@@ -40,7 +36,7 @@ func main() {
 
 		c3 := c2.Clone()
 		c3.OnResponse(func(r *colly.Response) {
-			r.Save(r.FileName())
+			r.Save("./invoices/" + r.FileName())
 		})
 		c3.Visit("https://www.dijnet.hu/ekonto/control/szamla_pdf")
 		c3.Visit("https://www.dijnet.hu/ekonto/control/szamla_xml")
@@ -49,7 +45,15 @@ func main() {
 	})
 
 	c.Post("https://www.dijnet.hu/ekonto/control/szamla_search_submit", map[string]string{
-		"vfw_form": "szamla_search_submit",
-		"vfw_coll": "szamla_search_params",
+		"vfw_form":     "szamla_search_submit",
+		"vfw_coll":     "szamla_search_params",
+		"szlaszolgnev": "",
+		"regszolgid":   "",
+		"datumtol":     "2020.03.15",
+		"datumig":      "2020.04.12",
 	})
+}
+
+func main() {
+	download()
 }
