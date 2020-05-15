@@ -1,15 +1,13 @@
-package main
+package dijnet
 
 import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"mime"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -150,7 +148,7 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 		from = query.from.Format(dateLayout)
 	}
 	if !query.to.IsZero() {
-		from = query.to.Format(dateLayout)
+		to = query.to.Format(dateLayout)
 	}
 
 	payload := url.Values{}
@@ -214,21 +212,14 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 	return ret, nil
 }
 
-func (s Service) downloadFile(URL string, dir string) error {
+func (s Service) downloadFile(URL string, filename string) error {
 	resp, err := s.client.Get(URL)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	contentDisposition := resp.Header.Get("Content-Disposition")
-	_, params, err := mime.ParseMediaType(contentDisposition)
-	if err != nil {
-		return err
-	}
-	filename := params["filename"]
-
-	out, err := os.Create(filepath.Join(dir, filename))
+	out, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
@@ -237,7 +228,7 @@ func (s Service) downloadFile(URL string, dir string) error {
 	return err
 }
 
-func (s Service) DownloadInvoice(i Invoice, pdf bool, xml bool, dir string) error {
+func (s Service) DownloadInvoice(i Invoice, pdf string, xml string) error {
 	resp, err := s.client.Get(
 		"https://www.dijnet.hu/ekonto/control/szamla_select?vfw_coll=szamla_list&vfw_rowid=" + i.ID + "&exp=K",
 	)
@@ -259,14 +250,14 @@ func (s Service) DownloadInvoice(i Invoice, pdf bool, xml bool, dir string) erro
 		return err
 	}
 
-	if pdf {
-		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_pdf", dir)
+	if pdf != "" {
+		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_pdf", pdf)
 		if err != nil {
 			return err
 		}
 	}
-	if xml {
-		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_xml", dir)
+	if xml != "" {
+		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_xml", xml)
 		if err != nil {
 			return err
 		}
@@ -283,36 +274,4 @@ func (s Service) DownloadInvoice(i Invoice, pdf bool, xml bool, dir string) erro
 	}
 
 	return nil
-}
-
-func main() {
-	username := os.Getenv("DIJNET_USERNAME")
-	password := os.Getenv("DIJNET_PASSWORD")
-	srv := NewService()
-	err := srv.Login(username, password)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	providers, err := srv.Providers()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(providers)
-	query := InvoicesQuery{
-		from: time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
-	}
-	invoices, err := srv.Invoices(query)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("%+v", invoices)
-
-	err = srv.DownloadInvoice(invoices[0], false, true, "invoices")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 }
