@@ -120,10 +120,10 @@ type Invoice struct {
 }
 
 type InvoicesQuery struct {
-	provider string
-	issuerID string
-	from     time.Time
-	to       time.Time
+	Provider string
+	IssuerID string
+	From     time.Time
+	To       time.Time
 }
 
 func cleanNumber(r rune) rune {
@@ -137,25 +137,25 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 	var ret []Invoice
 
 	e, _ := htmlindex.Get("iso-8859-2")
-	provider, err := e.NewEncoder().String(query.provider)
+	provider, err := e.NewEncoder().String(query.Provider)
 	if err != nil {
 		return ret, err
 	}
 
 	dateLayout := "2006.01.02"
 	var from, to string
-	if !query.from.IsZero() {
-		from = query.from.Format(dateLayout)
+	if !query.From.IsZero() {
+		from = query.From.Format(dateLayout)
 	}
-	if !query.to.IsZero() {
-		to = query.to.Format(dateLayout)
+	if !query.To.IsZero() {
+		to = query.To.Format(dateLayout)
 	}
 
 	payload := url.Values{}
 	payload.Set("vfw_form", "szamla_search_submit")
 	payload.Set("vfw_coll", "szamla_search_params")
 	payload.Set("szlaszolgnev", provider)
-	payload.Set("regszolgid", query.issuerID)
+	payload.Set("regszolgid", query.IssuerID)
 	payload.Set("datumtol", from)
 	payload.Set("datumig", to)
 	req, err := http.NewRequest(http.MethodPost,

@@ -22,8 +22,8 @@ func TestThings(t *testing.T) {
 	}
 	fmt.Println(providers)
 	query := InvoicesQuery{
-		from: time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC),
-		to:   time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+		From: time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
 	}
 	invoices, err := srv.Invoices(query)
 	if err != nil {
