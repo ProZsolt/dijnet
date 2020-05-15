@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -212,6 +214,77 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 	return ret, nil
 }
 
+func (s Service) downloadFile(URL string, dir string) error {
+	resp, err := s.client.Get(URL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	contentDisposition := resp.Header.Get("Content-Disposition")
+	_, params, err := mime.ParseMediaType(contentDisposition)
+	if err != nil {
+		return err
+	}
+	filename := params["filename"]
+
+	out, err := os.Create(filepath.Join(dir, filename))
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func (s Service) DownloadInvoice(i Invoice, pdf bool, xml bool, dir string) error {
+	resp, err := s.client.Get(
+		"https://www.dijnet.hu/ekonto/control/szamla_select?vfw_coll=szamla_list&vfw_rowid=" + i.ID + "&exp=K",
+	)
+	if err != nil {
+		return err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	resp, err = s.client.Get(
+		"https://www.dijnet.hu/ekonto/control/szamla_letolt",
+	)
+	if err != nil {
+		return err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
+
+	if pdf {
+		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_pdf", dir)
+		if err != nil {
+			return err
+		}
+	}
+	if xml {
+		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_xml", dir)
+		if err != nil {
+			return err
+		}
+	}
+	resp, err = s.client.Get(
+		"https://www.dijnet.hu/ekonto/control/szamla_list",
+	)
+	if err != nil {
+		return err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	username := os.Getenv("DIJNET_USERNAME")
 	password := os.Getenv("DIJNET_PASSWORD")
@@ -236,4 +309,10 @@ func main() {
 		return
 	}
 	fmt.Printf("%+v", invoices)
+
+	err = srv.DownloadInvoice(invoices[0], false, true, "invoices")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
