@@ -12,8 +12,9 @@ Download it using
 package main
 
 import (
-  "time"
   "fmt"
+  "path/filepath"
+  "time"
 
   "github.com/ProZsolt/dijnet"
 )
@@ -27,7 +28,7 @@ func main() {
   }
   
   //List available providers
-  providers, err = srv.Providers()
+  providers, err := srv.Providers()
   if err != nil {
     // handle error
   }
@@ -47,8 +48,8 @@ func main() {
 
   for _, invoice := range invoices {
     basePath := "invoices"
-    PDF = filepath.Join(basePath, invoice.InvoiceID+".pdf")
-    XML = filepath.Join(basePath, invoice.InvoiceID+".xml")
+    PDF := filepath.Join(basePath, invoice.InvoiceID+".pdf")
+    XML := filepath.Join(basePath, invoice.InvoiceID+".xml")
     err = srv.DownloadInvoice(invoice, PDF, XML)
     if err != nil {
       // handle error
