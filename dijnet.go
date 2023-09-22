@@ -1,6 +1,7 @@
 package dijnet
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -21,20 +22,17 @@ import (
 func NewService() Service {
 	cookieJar, _ := cookiejar.New(nil)
 
-	return Service{client: &http.Client{
-		Jar: cookieJar,
-	}}
+	return Service{
+		client: &http.Client{
+			Jar: cookieJar,
+		},
+		baseURL: "https://www.dijnet.hu",
+	}
 }
 
 type Service struct {
-	client *http.Client
-}
-
-func isLoggedIn(body string) bool {
-	if strings.Contains(string(body), "Bejelentkez&eacute;si n&eacute;v: <strong>") {
-		return true
-	}
-	return false
+	client  *http.Client
+	baseURL string
 }
 
 func isRequestOrderRight(body string) bool {
@@ -49,21 +47,51 @@ func decodeHTMLBody(body io.Reader) io.Reader {
 	return e.NewDecoder().Reader(body)
 }
 
-func (s Service) Login(username string, password string) error {
+type loginResponse struct {
+	Success bool   `json:"success"`
+	URL     string `json:"url"`
+	Error   string `json:"error"`
+}
+
+func (s Service) login(username string, password string) (loginResponse, error) {
 	payload := url.Values{}
-	payload.Set("vfw_form", "login_check_password")
-	payload.Set("vfw_coll", "direct")
 	payload.Set("username", username)
 	payload.Set("password", password)
 	req, err := http.NewRequest(http.MethodPost,
-		"https://www.dijnet.hu/ekonto/login/login_check_password",
+		s.baseURL+"/ekonto/login/login_check_ajax",
 		strings.NewReader(payload.Encode()),
 	)
 	if err != nil {
-		return err
+		return loginResponse{}, err
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return loginResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return loginResponse{}, fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
+	}
+
+	var status loginResponse
+
+	err = json.NewDecoder(resp.Body).Decode(&status)
+	if err != nil {
+		return loginResponse{}, err
+	}
+
+	return status, nil
+}
+
+func (s Service) visitMain(mainURL string) error {
+	req, err := http.NewRequest("GET", s.baseURL+mainURL, nil)
+	if err != nil {
+		return err
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -74,19 +102,30 @@ func (s Service) Login(username string, password string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	return nil
+}
+
+func (s Service) Login(username string, password string) error {
+	status, err := s.login(username, password)
 	if err != nil {
 		return err
 	}
-	if !isLoggedIn(string(body)) {
-		return fmt.Errorf("wrong username or password")
+
+	if !status.Success {
+		return fmt.Errorf("unable to login: %s", status.Error)
 	}
+
+	err = s.visitMain(status.URL)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (s Service) Providers() ([]string, error) {
 	var ret []string
-	resp, err := s.client.Get("https://www.dijnet.hu/ekonto/control/szamla_search")
+	resp, err := s.client.Get(s.baseURL + "/ekonto/control/szamla_search")
 	if err != nil {
 		return ret, err
 	}
@@ -159,7 +198,7 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 	payload.Set("datumtol", from)
 	payload.Set("datumig", to)
 	req, err := http.NewRequest(http.MethodPost,
-		"https://www.dijnet.hu/ekonto/control/szamla_search_submit",
+		s.baseURL+"/ekonto/control/szamla_search_submit",
 		strings.NewReader(payload.Encode()),
 	)
 	if err != nil {
@@ -177,7 +216,7 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 	if resp.StatusCode != http.StatusOK {
 		return ret, fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
 	}
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(decodeHTMLBody(resp.Body))
 	if err != nil {
 		return ret, err
 	}
@@ -230,7 +269,7 @@ func (s Service) downloadFile(URL string, filename string) error {
 
 func (s Service) DownloadInvoice(i Invoice, pdf string, xml string) error {
 	resp, err := s.client.Get(
-		"https://www.dijnet.hu/ekonto/control/szamla_select?vfw_coll=szamla_list&vfw_rowid=" + i.ID + "&exp=K",
+		s.baseURL + "/ekonto/control/szamla_select?vfw_coll=szamla_list&vfw_rowid=" + i.ID + "&exp=K",
 	)
 	if err != nil {
 		return err
@@ -240,7 +279,7 @@ func (s Service) DownloadInvoice(i Invoice, pdf string, xml string) error {
 		return err
 	}
 	resp, err = s.client.Get(
-		"https://www.dijnet.hu/ekonto/control/szamla_letolt",
+		s.baseURL + "/ekonto/control/szamla_letolt",
 	)
 	if err != nil {
 		return err
@@ -251,19 +290,19 @@ func (s Service) DownloadInvoice(i Invoice, pdf string, xml string) error {
 	}
 
 	if pdf != "" {
-		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_pdf", pdf)
+		err = s.downloadFile(s.baseURL+"/ekonto/control/szamla_pdf", pdf)
 		if err != nil {
 			return err
 		}
 	}
 	if xml != "" {
-		err = s.downloadFile("https://www.dijnet.hu/ekonto/control/szamla_xml", xml)
+		err = s.downloadFile(s.baseURL+"/ekonto/control/szamla_xml", xml)
 		if err != nil {
 			return err
 		}
 	}
 	resp, err = s.client.Get(
-		"https://www.dijnet.hu/ekonto/control/szamla_list",
+		s.baseURL + "/ekonto/control/szamla_list",
 	)
 	if err != nil {
 		return err
