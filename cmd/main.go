@@ -21,16 +21,18 @@ func main() {
 		log.Fatalln("Login error: ", err)
 	}
 
-	// Need to call it otherwise the invoices call will fail
-	_, err = srv.Providers()
+	_, token, err := srv.Providers()
 	if err != nil {
 		log.Fatalln("Unable to get providers: ", err)
 	}
 
 	log.Println("Get invoices")
-	invoices, err := srv.Invoices(dijnet.InvoicesQuery{})
+	invoices, err := srv.Invoices(dijnet.InvoicesQuery{Token: token})
 	if err != nil {
 		log.Fatalln("Unable to get invoices: ", err)
+	}
+	if len(invoices) == 0 {
+		log.Println("Unable to find any invoice")
 	}
 
 	for i, invoice := range invoices {

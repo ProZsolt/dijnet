@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -123,27 +122,37 @@ func (s Service) Login(username string, password string) error {
 	return nil
 }
 
-func (s Service) Providers() ([]string, error) {
-	var ret []string
+func (s Service) Providers() (providers []string, token string, err error) {
 	resp, err := s.client.Get(s.baseURL + "/ekonto/control/szamla_search")
 	if err != nil {
-		return ret, err
+		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return ret, fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
+		return providers, token, fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
 	}
-	body, err := ioutil.ReadAll(decodeHTMLBody(resp.Body))
+
+	doc, err := goquery.NewDocumentFromReader(decodeHTMLBody(resp.Body))
 	if err != nil {
-		return ret, err
+		return
 	}
-	r, _ := regexp.Compile("sopts.add\\('(.+)'\\)")
-	m := r.FindAllStringSubmatch(string(body), -1)
+
+	form := doc.Find("#content_bs div")
+
+	script, err := form.Html()
+	if err != nil {
+		return
+	}
+	r, _ := regexp.Compile(`sopts.add\('(.+)'\)`)
+	m := r.FindAllStringSubmatch(string(script), -1)
 	for _, e := range m {
-		ret = append(ret, e[1])
+		providers = append(providers, e[1])
 	}
-	return ret, err
+
+	token = doc.Find("#content_bs div form input[name=vfw_token]").AttrOr("value", "")
+
+	return
 }
 
 type Invoice struct {
@@ -163,6 +172,7 @@ type InvoicesQuery struct {
 	IssuerID string
 	From     time.Time
 	To       time.Time
+	Token    string
 }
 
 func cleanNumber(r rune) rune {
@@ -192,6 +202,7 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 
 	payload := url.Values{}
 	payload.Set("vfw_form", "szamla_search_submit")
+	payload.Set("vfw_token", query.Token)
 	payload.Set("vfw_coll", "szamla_search_params")
 	payload.Set("szlaszolgnev", provider)
 	payload.Set("regszolgid", query.IssuerID)

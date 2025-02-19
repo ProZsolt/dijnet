@@ -16,14 +16,15 @@ func TestThings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	providers, err := srv.Providers()
+	providers, token, err := srv.Providers()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	fmt.Println(providers)
 	query := InvoicesQuery{
-		From: time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC),
-		To:   time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+		From:  time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC),
+		To:    time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+		Token: token,
 	}
 	invoices, err := srv.Invoices(query)
 	if err != nil {
