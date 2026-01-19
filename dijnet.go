@@ -238,23 +238,23 @@ func (s Service) Invoices(query InvoicesQuery) ([]Invoice, error) {
 		s.Find("td").Each(func(i int, s *goquery.Selection) {
 			switch i {
 			case 0:
-				invoice.Provider = s.Text()
+				invoice.Provider = strings.TrimSpace(s.Text())
 			case 1:
-				invoice.IssuerID = s.Text()
+				invoice.IssuerID = strings.TrimSpace(s.Text())
 			case 2:
-				invoice.InvoiceID = s.Text()
+				invoice.InvoiceID = strings.TrimSpace(s.Text())
 			case 3:
-				invoice.DateOfIssue, _ = time.Parse(dateLayout, s.Text())
+				invoice.DateOfIssue, _ = time.Parse(dateLayout, strings.TrimSpace(s.Text()))
 			case 4:
-				n := strings.Map(cleanNumber, s.Text())
+				n := strings.Map(cleanNumber, strings.TrimSpace(s.Text()))
 				invoice.Total, _ = strconv.Atoi(n)
 			case 5:
-				invoice.PaymentDeadline, _ = time.Parse(dateLayout, s.Text())
+				invoice.PaymentDeadline, _ = time.Parse(dateLayout, strings.TrimSpace(s.Text()))
 			case 6:
-				n := strings.Map(cleanNumber, s.Text())
+				n := strings.Map(cleanNumber, strings.TrimSpace(s.Text()))
 				invoice.Payable, _ = strconv.Atoi(n)
 			case 7:
-				invoice.Status = s.Text()
+				invoice.Status = strings.TrimSpace(s.Text())
 			}
 		})
 		ret = append(ret, invoice)
